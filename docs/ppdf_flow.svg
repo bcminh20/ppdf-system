@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#334155"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#64748b" flood-opacity="0.25"/>
+    </filter>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .stage { font: 700 21px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 600 17px Arial, sans-serif; fill: #0f172a; }
+      .small { font: 15px Arial, sans-serif; fill: #334155; }
+      .note { font: 14px Arial, sans-serif; fill: #475569; }
+      .box { stroke: #0284c7; stroke-width: 2; rx: 12; filter: url(#shadow); }
+      .decision { stroke: #d97706; stroke-width: 2; fill: #fef3c7; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .boundary { stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 8 6; fill: #f8fafc; rx: 18; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1060" fill="#ffffff"/>
+  <text x="900" y="42" text-anchor="middle" class="title">PPDF áp dụng cho điều tra rò rỉ dữ liệu nội bộ trên disk image</text>
+  <text x="900" y="70" text-anchor="middle" class="small">Luồng 4 giai đoạn theo Ogunseyi &amp; Adedayo (2023), điều chỉnh cho kịch bản NCL/Computer &amp; Disk Forensics</text>
+
+  <!-- stage 1 -->
+  <rect x="30" y="100" width="1740" height="190" class="boundary"/>
+  <text x="55" y="132" class="stage">Stage 1 — Preparation / Key Generation</text>
+  <rect x="65" y="165" width="235" height="82" class="box" fill="#e0f2fe"/>
+  <text x="182" y="192" text-anchor="middle" class="label">Xác định phạm vi</text>
+  <text x="182" y="216" text-anchor="middle" class="small">warrant, hypothesis, scope</text>
+  <path d="M300 206 L345 206" class="arrow"/>
+  <polygon points="420,158 500,206 420,254 340,206" class="decision"/>
+  <text x="420" y="201" text-anchor="middle" class="label">User hợp tác?</text>
+  <text x="420" y="222" text-anchor="middle" class="small">cooperating user</text>
+  <path d="M500 182 L565 182" class="arrow"/>
+  <text x="530" y="170" class="small">Có</text>
+  <rect x="565" y="145" width="270" height="82" class="box" fill="#dcfce7"/>
+  <text x="700" y="174" text-anchor="middle" class="label">User tạo cặp khóa</text>
+  <text x="700" y="198" text-anchor="middle" class="small">public/private key</text>
+  <path d="M500 230 L565 260" class="arrow"/>
+  <text x="530" y="265" class="small">Không</text>
+  <rect x="565" y="235" width="270" height="42" class="box" fill="#fef3c7"/>
+  <text x="700" y="262" text-anchor="middle" class="label">Điều tra viên tạo khóa</text>
+  <path d="M835 186 L900 186" class="arrow"/>
+  <path d="M835 256 L900 256 L900 186" class="arrow"/>
+  <rect x="900" y="145" width="300" height="82" class="box" fill="#e0f2fe"/>
+  <text x="1050" y="174" text-anchor="middle" class="label">Lưu private key có kiểm soát</text>
+  <text x="1050" y="198" text-anchor="middle" class="small">senior approval + audit log</text>
+  <path d="M1200 186 L1265 186" class="arrow"/>
+  <rect x="1265" y="145" width="430" height="82" class="box" fill="#e0f2fe"/>
+  <text x="1480" y="174" text-anchor="middle" class="label">Chia sẻ public key / tạo policy</text>
+  <text x="1480" y="198" text-anchor="middle" class="small">keyword dictionary, retention, chain of custody</text>
+
+  <!-- stage 2 -->
+  <rect x="30" y="325" width="1740" height="220" class="boundary"/>
+  <text x="55" y="357" class="stage">Stage 2 — Preservation / Encryption</text>
+  <rect x="65" y="390" width="275" height="95" class="box" fill="#e0f2fe"/>
+  <text x="202" y="420" text-anchor="middle" class="label">Acquire disk image</text>
+  <text x="202" y="445" text-anchor="middle" class="small">read-only, hash, notes</text>
+  <text x="202" y="466" text-anchor="middle" class="small">E01/raw + manifest</text>
+  <path d="M340 437 L390 437" class="arrow"/>
+  <rect x="390" y="390" width="300" height="95" class="box" fill="#e0f2fe"/>
+  <text x="540" y="420" text-anchor="middle" class="label">Từ khóa 1: disjunctive</text>
+  <text x="540" y="445" text-anchor="middle" class="small">leak ∪ confidential ∪ USB</text>
+  <text x="540" y="466" text-anchor="middle" class="small">rộng để không bỏ sót</text>
+  <path d="M690 437 L740 437" class="arrow"/>
+  <rect x="740" y="390" width="310" height="95" class="box" fill="#dcfce7"/>
+  <text x="895" y="420" text-anchor="middle" class="label">Lọc case-related</text>
+  <text x="895" y="445" text-anchor="middle" class="small">metadata + files + artifacts</text>
+  <text x="895" y="466" text-anchor="middle" class="small">không mã hóa dữ liệu ngoài phạm vi</text>
+  <path d="M1050 437 L1100 437" class="arrow"/>
+  <rect x="1100" y="390" width="300" height="95" class="box" fill="#fef3c7"/>
+  <text x="1250" y="420" text-anchor="middle" class="label">Encrypt kết quả</text>
+  <text x="1250" y="445" text-anchor="middle" class="small">public key / searchable encryption</text>
+  <text x="1250" y="466" text-anchor="middle" class="small">store ciphertext + manifest</text>
+  <path d="M1400 437 L1450 437" class="arrow"/>
+  <rect x="1450" y="390" width="245" height="95" class="box" fill="#e0f2fe"/>
+  <text x="1572" y="420" text-anchor="middle" class="label">Đóng băng bản gốc</text>
+  <text x="1572" y="445" text-anchor="middle" class="small">original image offline</text>
+  <text x="1572" y="466" text-anchor="middle" class="small">analyst dùng working copy</text>
+
+  <!-- stage 3 -->
+  <rect x="30" y="580" width="1740" height="220" class="boundary"/>
+  <text x="55" y="612" class="stage">Stage 3 — Extraction / Computation</text>
+  <rect x="65" y="645" width="300" height="95" class="box" fill="#e0f2fe"/>
+  <text x="215" y="675" text-anchor="middle" class="label">Từ khóa 2: conjunctive</text>
+  <text x="215" y="700" text-anchor="middle" class="small">project-x ∩ export ∩ 2026-10-14</text>
+  <text x="215" y="721" text-anchor="middle" class="small">hẹp, case-pertinent</text>
+  <path d="M365 692 L420 692" class="arrow"/>
+  <rect x="420" y="645" width="310" height="95" class="box" fill="#dcfce7"/>
+  <text x="575" y="675" text-anchor="middle" class="label">Search trên ciphertext</text>
+  <text x="575" y="700" text-anchor="middle" class="small">SE/HE; không mở dữ liệu riêng tư</text>
+  <text x="575" y="721" text-anchor="middle" class="small">repeat để refine hypothesis</text>
+  <path d="M730 692 L785 692" class="arrow"/>
+  <rect x="785" y="645" width="310" height="95" class="box" fill="#dcfce7"/>
+  <text x="940" y="675" text-anchor="middle" class="label">Phân tích encrypted</text>
+  <text x="940" y="700" text-anchor="middle" class="small">timeline, metadata, USB, archive</text>
+  <text x="940" y="721" text-anchor="middle" class="small">correlation / clustering (K-means)</text>
+  <path d="M1095 692 L1150 692" class="arrow"/>
+  <polygon points="1235,642 1325,692 1235,742 1145,692" class="decision"/>
+  <text x="1235" y="687" text-anchor="middle" class="label">Đủ bằng chứng?</text>
+  <text x="1235" y="708" text-anchor="middle" class="small">hypothesis</text>
+  <path d="M1325 672 L1400 672" class="arrow"/>
+  <text x="1350" y="658" class="small">Có</text>
+  <rect x="1400" y="645" width="295" height="95" class="box" fill="#fef3c7"/>
+  <text x="1547" y="675" text-anchor="middle" class="label">Xin quyền giải mã</text>
+  <text x="1547" y="700" text-anchor="middle" class="small">senior investigator approval</text>
+  <text x="1547" y="721" text-anchor="middle" class="small">log purpose + scope</text>
+  <path d="M1145 712 L1065 770 L365 770 L365 730" class="arrow"/>
+  <text x="850" y="790" text-anchor="middle" class="small">Không: refine từ khóa 2 / thu thập thêm artifact có lý do</text>
+
+  <!-- stage 4 -->
+  <rect x="30" y="835" width="1740" height="175" class="boundary"/>
+  <text x="55" y="867" class="stage">Stage 4 — Presentation / Decryption</text>
+  <rect x="65" y="895" width="340" height="78" class="box" fill="#fef3c7"/>
+  <text x="235" y="925" text-anchor="middle" class="label">Decrypt kết quả đã được duyệt</text>
+  <text x="235" y="949" text-anchor="middle" class="small">private key + audit trail</text>
+  <path d="M405 934 L470 934" class="arrow"/>
+  <rect x="470" y="895" width="360" height="78" class="box" fill="#e0f2fe"/>
+  <text x="650" y="925" text-anchor="middle" class="label">Kiểm tra / tái lập kết quả</text>
+  <text x="650" y="949" text-anchor="middle" class="small">hash, timestamps, tool versions</text>
+  <path d="M830 934 L895 934" class="arrow"/>
+  <rect x="895" y="895" width="360" height="78" class="box" fill="#dcfce7"/>
+  <text x="1075" y="925" text-anchor="middle" class="label">Báo cáo và kiểm định giả thuyết</text>
+  <text x="1075" y="949" text-anchor="middle" class="small">evidence → finding → confidence</text>
+  <path d="M1255 934 L1320 934" class="arrow"/>
+  <rect x="1320" y="895" width="375" height="78" class="box" fill="#e0f2fe"/>
+  <text x="1507" y="925" text-anchor="middle" class="label">Công bố theo quyền hạn</text>
+  <text x="1507" y="949" text-anchor="middle" class="small">ẩn dữ liệu không liên quan</text>
+</svg>
