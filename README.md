@@ -1,10 +1,87 @@
-# PPDF Algorithm 1 — Asymmetric Key Generation
+# PPDF — Khởi tạo khóa, trích xuất đặc trưng và mã hóa HE
 
-Module Python này triển khai phần **Khởi tạo khóa (Algorithm 1)** trong mô hình Privacy-Preserving Digital Forensics (PPDF). Trong bài của nhóm, module này là **Stage 1 — Preparation / Key Generation**: tạo cặp khóa để bảo vệ dữ liệu pháp chứng ở các bước lọc, mã hóa và phân tích sau đó.
+Prototype Privacy-Preserving Digital Forensics (PPDF) theo paper *Cryptographic Techniques for Data Privacy in Digital Forensics*. Repo triển khai **Algorithm 1 — Khởi tạo khóa** và **Bước 2.2b / Algorithm 2 — Trích xuất & Mã hóa HE** cho bộ bàn giao CFReDS Data Leakage.
+
+| Thành phần | Đầu vào | Đầu ra |
+|---|---|---|
+| `ppdf_keygen.py` | Chiều lattice và độ dài hệ số | Public key `(d, r)` và private key `(w_i)` |
+| `ppdf_extract_encrypt.py` | Bộ dữ liệu lọc sạch và public key | Vector `V_i = [Số_từ_khóa, Điểm_ẩn_giấu]`, bản mã `Cr'_kwt`, hồ sơ kiểm chứng |
+| `ppdf_he.py` | Vector đặc trưng, public key | Công thức Algorithm 2 áp dụng trên từng bit của vector |
+
+Xem [hướng dẫn chi tiết bước 2.2b](docs/HE_Step_2_2b.md) để kiểm tra cách gộp hit, chấm điểm, mã hóa và bàn giao. [Kế hoạch PPDF](docs/PPDF_Disk_Forensics_Plan.md) mô tả quy trình tổng thể. Phần bên dưới mục **Tham chiếu Algorithm 1** giữ API và hướng dẫn tạo khóa.
+
+## Chạy nhanh bước 2.2b
+
+Yêu cầu **Python 3.11+** và SymPy. Máy hiện tại có môi trường conda `sage`:
+
+```bash
+conda activate sage
+python -m pip install -r requirements.txt
+python ppdf_extract_encrypt.py \
+  --input "Data Forensic lọc sạch" \
+  --public-key public_key.json \
+  --dimension 8 \
+  --bit-width 8 \
+  --output outputs/he_step_2_2b
+```
+
+Nếu không dùng conda, cài dependencies rồi chạy cùng lệnh bằng Python 3.11+. Bước này dùng public key hiện có, không đọc `.env` và không cần chạy lại module tạo khóa. Thư mục đầu ra phải mới; khi đã có kết quả, đổi `--output`, ví dụ `outputs/he_step_2_2b_run2`.
+
+Bộ dữ liệu đặt cục bộ theo cấu trúc:
+
+```text
+Data Forensic lọc sạch/
+  MANIFEST_SHA256.json
+  TuKhoa_PC.xml
+  TuKhoa_RM1_RM2.xml
+  PC/                      email, OST, log, KeywordHits/*.csv
+  RM1/                     tài liệu nguồn đối chiếu
+  RM2/                     CSV hit, bản xuất gốc và bản đổi đuôi
+```
+
+Thư mục dữ liệu, `.env` và `outputs/` được Git bỏ qua. Sau khi clone repo, cần đặt bộ bàn giao vào đường dẫn trên hoặc chỉ định `--input` khác. Chương trình kiểm tra hash trong manifest trước và sau xử lý, giữ nguyên file chứng cứ.
+
+## Đặc trưng và bản mã
+
+`Số_từ_khóa` đếm từ khóa **khác nhau** từ kết quả Autopsy và nội dung/đường dẫn trích xuất. `Điểm_ẩn_giấu` cộng 3 điểm nếu đuôi sai chữ ký file, 2 điểm với đường dẫn phục hồi `$OrphanFiles`/`$CarvedFiles`, 1 điểm với artifact `-slack`. Đây là quy tắc của prototype; điểm không phải kết luận về ý định che giấu.
+
+Do Algorithm 4 giải mã modulo 2, mỗi điểm nguyên được tách thành 8 bit không dấu, bit thấp trước; mỗi bit được mã hóa riêng:
+
+```text
+c = [b + 2 × Σ u_i × r^i]_d, với u_i ∈ {-1, 0, 1}
+Cr'_kwt cho mỗi V_i: 2 đặc trưng × 8 ciphertext bit
+```
+
+Noise dùng randomness hệ thống và không được ghi ra kết quả. Bản mã lưu số nguyên dưới dạng chuỗi thập phân để tránh mất chính xác khi đọc bằng JavaScript.
+
+| File đầu ra | Mục đích |
+|---|---|
+| `audit/features.csv`, `audit/features.json` | Vector plaintext, từ khóa, đường dẫn, hash và căn cứ để kiểm chứng cục bộ |
+| `audit/provenance.json`, `audit/run_summary.json` | Bộ từ khóa, nguồn tham chiếu, tham số và thống kê |
+| `share/Cr_kwt_prime.json`, `share/public_key.json` | Bản mã và khóa công khai cho bước nhận tiếp theo |
+| `OUTPUT_SHA256.json` | Checksum các file kết quả |
+
+`audit/` chứa thông tin plaintext; khi bàn giao phần mã hóa, dùng `share/`.
+
+## Kết quả và kiểm thử
+
+Lần chạy trên bộ bàn giao ngày 15/11/2026 đã chấm **347 đối tượng**, mã hóa **285 đối tượng khớp OR** thành **4.560 ciphertext bit**, giữ 62 đối tượng không quan sát được từ khóa trong audit. Có 250 đối tượng chỉ có CSV hit và chưa có byte xuất cục bộ; kết quả của chúng dựa trên thông tin được bàn giao. Toàn bộ **203 file trong manifest** khớp SHA-256 trước và sau xử lý.
+
+```bash
+python -m unittest -v test_ppdf_keygen.py test_ppdf_he.py
+```
+
+**14 kiểm thử đã đạt** trong môi trường `sage`: tạo/lưu khóa, ví dụ công thức mã hóa tính tay, biểu diễn bit, kiểm tra tham số, trích file sai đuôi, gộp hit và bản đổi tên, phát hiện thay đổi hash, cấu trúc đầu ra.
+
+Đây là prototype công thức theo paper, chưa kiểm định giải mã đầu cuối hoặc noise budget. Với `n=8`, chỉ có `3^8 = 6.561` khả năng noise cho mỗi bit, nên cấu hình này chưa đủ bảo mật cho dữ liệu nhạy cảm thực tế. Phân tích số học ở bước sau cần xử lý biểu diễn bit và carry; chưa có K-means trên bản mã.
+
+## Tham chiếu Algorithm 1
+
+Phần còn lại mô tả riêng module `ppdf_keygen.py`: **Stage 1 — Preparation / Key Generation**, tạo cặp khóa để dùng ở các bước sau.
 
 ## NCL description
 
-Trong kịch bản NCL của nhóm, điều tra viên nhận được disk image của máy nhân viên bị nghi làm rò rỉ dữ liệu nội bộ. Module này không phân tích disk image và không tự tìm file. Nó chỉ tạo khóa trước khi các block khác bắt đầu trích xuất và mã hóa dữ liệu liên quan đến vụ án.
+Trong kịch bản NCL của nhóm, điều tra viên nhận được disk image của máy nhân viên bị nghi làm rò rỉ dữ liệu nội bộ. Module `ppdf_keygen.py` không phân tích disk image và không tự tìm file. Nó chỉ tạo khóa trước khi các block khác bắt đầu trích xuất và mã hóa dữ liệu liên quan đến vụ án.
 
 Flow sử dụng module:
 
@@ -19,7 +96,7 @@ PrivateKey → giữ local trong .env, chỉ dùng ở block giải mã được
 
 Ví dụ trong bài: block tìm kiếm đã lọc ra các artifact liên quan tới `Project-X`, USB và thao tác export. Block đó dùng public key để mã hóa dữ liệu. Private key được giữ lại ở máy điều tra viên để block cuối giải mã kết quả cần trình bày.
 
-Module **không** làm các việc sau:
+Module `ppdf_keygen.py` **không** làm các việc sau:
 
 - mount hoặc parse disk image;
 - tìm keyword trong filesystem;
