@@ -1,0 +1,25 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# PPDF Keys and Secrets
+.env
+*.key
+public_key.json
+secret_key*.json
+
+# Output data
+outputs/
+work/
+work_*/
+audit/
+share/
