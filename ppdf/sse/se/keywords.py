@@ -85,3 +85,24 @@ def load_keyword_lists(paths: list[Path], case_sensitive: bool = False) -> list[
     for path in paths:
         out.extend(parse_keyword_xml(Path(path), case_sensitive))
     return out
+
+
+def make_custom_keyword_list(
+    keywords_str: str,
+    name: str = "Custom_Target_Keywords",
+    case_sensitive: bool = False,
+) -> KeywordList:
+    """Tạo KeywordList động từ chuỗi từ khóa phân tách bằng dấu phẩy hoặc chấm phẩy."""
+    raw_terms = [t.strip() for t in keywords_str.replace(";", ",").split(",") if t.strip()]
+    kws = [
+        build_keyword(term, literal=False, whole=False, list_name=name, case_sensitive=case_sensitive)
+        for term in raw_terms
+    ]
+    return KeywordList(
+        name=name,
+        created="now",
+        modified="now",
+        source=None,
+        keywords=kws,
+    )
+

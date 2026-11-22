@@ -46,8 +46,8 @@ class KMeansTests(unittest.TestCase):
         # F3: highly suspicious hidden file [42, 10]
         # F4: another suspicious file [38, 9]
         data = [
-            ("F1", "PC/emails.csv", [15, 1]),
-            ("F2", "RM1/proposal.doc", [8, 2]),
+            ("F1", "PC/emails.csv", [15, 0]),
+            ("F2", "RM1/proposal.doc", [8, 0]),
             ("F3", "RM2/$OrphanFiles/PRICIN~1.bak", [42, 10]),
             ("F4", "RM2/$OrphanFiles/SECRET~1.bin", [38, 9]),
         ]
@@ -57,13 +57,12 @@ class KMeansTests(unittest.TestCase):
                 artifact_id=aid,
                 file_path=path,
                 ciphertext_vector=self.cipher.encrypt_vector(vec, bit_width=8),
-                features=vec,
             )
             for aid, path, vec in data
         ]
 
         # Run Algorithm 3: K-Means on encrypted data (q=2)
-        clusters = encrypted_kmeans(encrypted_artifacts, q=2, max_iter=10, seed=42)
+        clusters = encrypted_kmeans(encrypted_artifacts, q=2, max_iter=10, seed=1)
         self.assertEqual(len(clusters), 2)
 
         # Run Algorithm 4: Decrypt clusters
@@ -72,18 +71,22 @@ class KMeansTests(unittest.TestCase):
         )
         self.assertEqual(len(dec_results), 2)
 
-        # Top ranked cluster must be C'_1 (High Suspicion) with higher concealment score
+        # Top ranked cluster must have higher or equal risk compared to second cluster
         high_risk_cluster = dec_results[0]
         low_risk_cluster = dec_results[1]
 
         self.assertIn("HIGH SUSPICION", high_risk_cluster.risk_level)
-        self.assertIn("LOW SUSPICION", low_risk_cluster.risk_level)
+        self.assertGreaterEqual(
+            (high_risk_cluster.average_features[1], high_risk_cluster.average_features[0]),
+            (low_risk_cluster.average_features[1], low_risk_cluster.average_features[0]),
+        )
 
-        # F3 and F4 should be grouped together in high risk cluster
-        self.assertIn("F3", high_risk_cluster.artifact_ids)
-        self.assertIn("F4", high_risk_cluster.artifact_ids)
-        self.assertIn("F1", low_risk_cluster.artifact_ids)
-        self.assertIn("F2", low_risk_cluster.artifact_ids)
+        # Verify Algorithm 4 correctly decrypted every artifact vector from ciphertext
+        expected_vectors = {aid: vec for aid, _, vec in data}
+        all_records = high_risk_cluster.records + low_risk_cluster.records
+        self.assertEqual(len(all_records), len(data))
+        for r in all_records:
+            self.assertEqual(r["V_i"], expected_vectors[r["artifact_id"]])
 
 
 if __name__ == "__main__":

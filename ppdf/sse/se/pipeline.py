@@ -464,11 +464,30 @@ def stage_verify(cfg: Config, work: WorkDirs, docs: list[ExtractedDoc], lists: l
         }
         raw_by_keyword = raw_keyword_hits(cfg, docs, kw_list.keywords)
         blind_docs = {doc_id for matched in blind_by_keyword.values() for doc_id in matched}
-        plain_docs = {doc_id for counts in plain_by_keyword.values() for doc_id in counts}
-        raw_docs = {doc_id for matched in raw_by_keyword.values() for doc_id in matched}
+        if cfg.mode == "conjunctive":
+            # Trong chế độ AND (Conjunctive), tài liệu kỳ vọng phải chứa ĐỦ TẤT CẢ từ khóa trong danh sách
+            plain_doc_sets = [set(counts.keys()) for counts in plain_by_keyword.values()]
+            plain_docs = set.intersection(*plain_doc_sets) if plain_doc_sets else set()
+            raw_doc_sets = [set(matched) for matched in raw_by_keyword.values()]
+            raw_docs = set.intersection(*raw_doc_sets) if raw_doc_sets else set()
+        else:
+            # Trong chế độ OR (Disjunctive), tài liệu kỳ vọng chỉ cần chứa ÍT NHẤT MỘT từ khóa
+            plain_docs = {doc_id for counts in plain_by_keyword.values() for doc_id in counts}
+            raw_docs = {doc_id for matched in raw_by_keyword.values() for doc_id in matched}
+
         for kw in kw_list.keywords:
             blind = blind_by_keyword.get(kw.text, set())
             plain = set(plain_by_keyword[kw.text])
+            if cfg.mode == "conjunctive":
+                # Ở phép AND, kết quả tìm mù bị ràng buộc bởi điều kiện đồng thời tất cả từ khóa
+                target_plain = plain & plain_docs
+                fp = len(blind - target_plain)
+                fn = len(target_plain - blind)
+                recall = round(len(blind & target_plain) / len(target_plain), 4) if target_plain else "n/a"
+            else:
+                fp = len(blind - plain)
+                fn = len(plain - blind)
+                recall = round(len(blind & plain) / len(plain), 4) if plain else "n/a"
             keyword_rows.append(
                 {
                     "keyword_list": kw_list.name,
@@ -477,9 +496,9 @@ def stage_verify(cfg: Config, work: WorkDirs, docs: list[ExtractedDoc], lists: l
                     "blind_docs": len(blind),
                     "plaintext_docs": len(plain),
                     "raw_bytes_docs": len(raw_by_keyword[kw.text]),
-                    "false_positive": len(blind - plain),
-                    "false_negative": len(plain - blind),
-                    "recall": round(len(blind & plain) / len(plain), 4) if plain else "n/a",
+                    "false_positive": fp,
+                    "false_negative": fn,
+                    "recall": recall,
                 }
             )
         for doc_id in sorted(blind_docs | plain_docs | raw_docs):

@@ -169,16 +169,22 @@ def cmd_stage3(args: argparse.Namespace) -> int:
 
     work = WorkDirs.open(sse_cfg)
     docs = load_docs_from_manifest(work)
-    lists = load_lists(sse_cfg)
 
-    list_name = getattr(args, "list_name", None)
-    if list_name:
-        from ppdf.sse.se.tokens import slugify
-        lists = [kl for kl in lists
-                 if kl.name == list_name or slugify(kl.name) == slugify(list_name)]
-        if not lists:
-            print(f"ERROR: Danh sách từ khóa '{list_name}' không tồn tại.", file=sys.stderr)
-            return 1
+    custom_keywords = getattr(args, "keywords", None)
+    if custom_keywords:
+        from ppdf.sse.se.keywords import make_custom_keyword_list
+        lists = [make_custom_keyword_list(custom_keywords, case_sensitive=sse_cfg.case_sensitive)]
+        print(f"  • Áp dụng danh sách từ khóa chỉ định cho tìm kiếm AND: {[k.text for k in lists[0].keywords]}")
+    else:
+        lists = load_lists(sse_cfg)
+        list_name = getattr(args, "list_name", None)
+        if list_name:
+            from ppdf.sse.se.tokens import slugify
+            lists = [kl for kl in lists
+                     if kl.name == list_name or slugify(kl.name) == slugify(list_name)]
+            if not lists:
+                print(f"ERROR: Danh sách từ khóa '{list_name}' không tồn tại.", file=sys.stderr)
+                return 1
 
     print("=" * 72)
     print("STAGE 3.1 — Lọc tinh bằng SSE (Conjunctive Search - AND)")
@@ -248,24 +254,24 @@ def cmd_stage3(args: argparse.Namespace) -> int:
                     artifact_id=matched_art_id,
                     file_path=doc.canonical_path,
                     ciphertext_vector=cipher_by_art_id[matched_art_id],
-                    features=art_meta.get(matched_art_id, {}).get("V_i"),
                 )
             )
 
-    # If no exact match (e.g. synthetic or limit), fallback to all candidate ciphertexts
+    # If no artifacts matched AND, handle cleanly without fallback to random records
     if not pertinent_artifacts:
-        print("  (Sử dụng các bản ghi mã hóa trong tập hợp đã lọc)")
-        for r in cipher_records[:10]:
-            aid = r["artifact_id"]
-            path = art_meta.get(aid, {}).get("source_path", aid)
-            pertinent_artifacts.append(
-                EncryptedArtifact(
-                    artifact_id=aid,
-                    file_path=path,
-                    ciphertext_vector=r["Cr_kwt_prime"],
-                    features=art_meta.get(aid, {}).get("V_i"),
-                )
-            )
+        print("\n[!] Không tìm thấy tài liệu nào thỏa mãn đồng thời tất cả các từ khóa AND.")
+        all_kws = [k.text for kl in lists for k in kl.keywords]
+        print(f"    (Danh sách từ khóa AND vừa tra cứu: {all_kws})")
+        print("    Gợi ý: Sử dụng tham số --keywords \"tu_khoa_1,tu_khoa_2\" để chọn tập từ khóa hẹp hơn.")
+        cluster_payload = {
+            "algorithm": "Algorithm 3 - K-Means on Encrypted Data",
+            "clusters_count": 0,
+            "pertinent_artifacts_count": 0,
+            "clusters": [],
+        }
+        cluster_path = stage3_dir / "encrypted_clusters.json"
+        save_json(cluster_path, cluster_payload)
+        return 0
 
     q = min(getattr(args, "q_clusters", 2), max(1, len(pertinent_artifacts)))
     encrypted_clusters = encrypted_kmeans(pertinent_artifacts, q=q, seed=42)
@@ -336,6 +342,30 @@ def cmd_stage4(args: argparse.Namespace) -> int:
         return 1
 
     stage3_data = load_json(stage3_cluster_path)
+    if not stage3_data.get("clusters") or stage3_data.get("clusters_count", 0) == 0:
+        print("\n[!] Không có cụm tài liệu chứng cứ khả nghi nào từ Stage 3.")
+        print("    Toàn bộ dữ liệu được bảo vệ an toàn trong vault.bin (100% Data Minimization).")
+        report_lines = [
+            "# BÁO CÁO KẾT THÚC ĐIỀU TRA PHÁP CHỨNG SỐ (PPDF HYBRID)",
+            "",
+            f"**Thời gian báo cáo**: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}  ",
+            f"**Mô hình**: Hybrid SSE (mKEES Exact Search) + HE (Lattice Algorithm 1-4)  ",
+            f"**Kho dữ liệu chứng cứ**: `{evidence_dir.name}`  ",
+            "",
+            "---",
+            "",
+            "## 1. Kết quả kiểm tra điều tra",
+            "- Không có tài liệu nào thỏa mãn đồng thời tất cả các từ khóa AND của vụ án.",
+            "- Không có file nào được cấp quyền giải mã xuất trình.",
+            "",
+            "## 2. Bảo vệ quyền riêng tư (Data Minimization)",
+            "- 100% dữ liệu tiếp tục được niêm phong an toàn trong `vault.bin` (AES-256).",
+        ]
+        report_path = stage4_dir / "bao_cao_phap_chung_ppdf.md"
+        report_path.write_text("\n".join(report_lines), encoding="utf-8")
+        print(f"  Báo cáo Pháp chứng → {report_path}")
+        return 0
+
     cipher_records = load_json(he_output / "share" / "Cr_kwt_prime.json")["records"]
     features_audit = load_json(he_output / "audit" / "features.json")
     cipher_map = {r["artifact_id"]: r["Cr_kwt_prime"] for r in cipher_records}
@@ -354,7 +384,6 @@ def cmd_stage4(args: argparse.Namespace) -> int:
                         artifact_id=aid,
                         file_path=path,
                         ciphertext_vector=cipher_map[aid],
-                        features=art_meta.get(aid, {}).get("V_i"),
                     )
                 )
 
@@ -585,6 +614,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_stage3.add_argument("--he-output", type=str, default="outputs/he_stage2")
     p_stage3.add_argument("--mode", default="conjunctive", choices=["disjunctive", "conjunctive"])
     p_stage3.add_argument("--list", dest="list_name", help="Tên danh sách từ khóa chỉ định")
+    p_stage3.add_argument("-k", "--keywords", help="Danh sách từ khóa chỉ định cho tìm kiếm AND (phân tách bởi dấu phẩy, ví dụ: 'secret_project,proposal')")
     p_stage3.add_argument("--q-clusters", type=int, default=2, help="Số cụm K-Means (mặc định 2: Nguy cơ cao / Thấp)")
 
     # --- stage4 ---
@@ -606,6 +636,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_full.add_argument("--env-file", default=".env")
     p_full.add_argument("--overwrite", action="store_true")
     p_full.add_argument("--he-output", type=str, default="outputs/he_stage2")
+    p_full.add_argument("-k", "--keywords", help="Danh sách từ khóa chỉ định cho tìm kiếm AND ở Stage 3 (phân tách bởi dấu phẩy)")
     p_full.add_argument("--q-clusters", type=int, default=2)
 
     # --- test ---

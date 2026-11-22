@@ -33,8 +33,8 @@ class EncryptedArtifact:
     # Cr_kwt_prime: [ [cipher_bits for feat_0], [cipher_bits for feat_1], ... ]
     # Each cipher_bit is a decimal string or int
     ciphertext_vector: list[list[str]]
-    # Optional known vector V_i = [keyword_count, concealment_score] from audit
-    features: list[int] | None = None
+    # Optional debug audit features (strictly for tests/debugging, NEVER used by kmeans or decrypt)
+    audit_features: list[int] | None = None
 
 
 @dataclass
@@ -160,27 +160,27 @@ def encrypted_kmeans(
 
     rng = random.Random(seed)
 
-    # 1. Randomly select q data records as initial centroids
-    initial_indices = rng.sample(range(len(artifacts)), q)
-    centroids = [artifacts[idx].ciphertext_vector for idx in initial_indices]
-    centroid_feats = [
-        [float(x) for x in artifacts[idx].features] if artifacts[idx].features is not None else None
-        for idx in initial_indices
-    ]
+    # 1. K-Means++ initialization directly in ciphertext space
+    first_idx = rng.randrange(len(artifacts))
+    centroids = [artifacts[first_idx].ciphertext_vector]
+    for _ in range(1, q):
+        dists = [
+            min(encrypted_distance(art.ciphertext_vector, c) for c in centroids)
+            for art in artifacts
+        ]
+        next_idx = dists.index(max(dists))
+        centroids.append(artifacts[next_idx].ciphertext_vector)
 
     assignments = [0] * len(artifacts)
 
     for iteration in range(max_iter):
-        # 2. For each artifact, assign to closest centroid
+        # 2. For each artifact, assign to closest centroid using homomorphic encrypted distance
         new_assignments = []
         for art in artifacts:
-            dists = []
-            for j in range(q):
-                if art.features is not None and centroid_feats[j] is not None:
-                    d = math.sqrt(sum((f1 - f2) ** 2 for f1, f2 in zip(art.features, centroid_feats[j])))
-                else:
-                    d = encrypted_distance(art.ciphertext_vector, centroids[j])
-                dists.append(d)
+            dists = [
+                encrypted_distance(art.ciphertext_vector, centroids[j])
+                for j in range(q)
+            ]
             closest = int(min(range(q), key=lambda j: dists[j]))
             new_assignments.append(closest)
 
@@ -189,14 +189,12 @@ def encrypted_kmeans(
             break
         assignments = new_assignments
 
-        # 3. Update centroids (component-wise average of ciphertext values)
+        # 3. Update centroids (component-wise average of ciphertext values directly in ciphertext space)
         new_centroids = []
-        new_centroid_feats = []
         for j in range(q):
             cluster_arts = [artifacts[k] for k in range(len(artifacts)) if assignments[k] == j]
             if not cluster_arts:
                 new_centroids.append(centroids[j])
-                new_centroid_feats.append(centroid_feats[j])
                 continue
 
             num_feats = len(cluster_arts[0].ciphertext_vector)
@@ -210,20 +208,9 @@ def encrypted_kmeans(
                 avg_vector.append(avg_bits)
             new_centroids.append(avg_vector)
 
-            if all(a.features is not None for a in cluster_arts):
-                dim = len(cluster_arts[0].features)
-                avg_f = [
-                    sum(float(a.features[d]) for a in cluster_arts) / len(cluster_arts)
-                    for d in range(dim)
-                ]
-                new_centroid_feats.append(avg_f)
-            else:
-                new_centroid_feats.append(None)
-
-        # 4. Termination check
+        # 4. Termination check via max shift on ciphertext domain
         shift = max(encrypted_distance(centroids[j], new_centroids[j]) for j in range(q))
         centroids = new_centroids
-        centroid_feats = new_centroid_feats
         if shift <= mu:
             break
 
@@ -265,12 +252,10 @@ def decrypt_clusters(
         total_feats = [0.0, 0.0]
 
         for art in cluster_arts:
-            if art.features is not None:
-                dec_vec = list(art.features)
-            else:
-                dec_vec = decrypt_vector(
-                    art.ciphertext_vector, private_key, modulus_d, bit_width=bit_width
-                )
+            # Algorithm 4: Decrypt feature vector directly from ciphertext using Private Key
+            dec_vec = decrypt_vector(
+                art.ciphertext_vector, private_key, modulus_d, bit_width=bit_width
+            )
             # dec_vec: [keyword_count, concealment_score]
             kw_count = dec_vec[0] if len(dec_vec) > 0 else 0
             conceal = dec_vec[1] if len(dec_vec) > 1 else 0
@@ -301,15 +286,25 @@ def decrypt_clusters(
             )
         )
 
-    # Rank clusters by risk: higher concealment score + keyword count = HIGH SUSPICION
+    # Rank clusters by risk: higher concealment score + keyword count = higher risk
     # Sort descending by (avg concealment score, avg keyword count)
     results.sort(key=lambda c: (c.average_features[1], c.average_features[0]), reverse=True)
 
     if results:
-        results[0].risk_level = "C'_1: HIGH SUSPICION (DELIBERATE CONCEALMENT)"
-        results[0].name = "C'_1 (Nguy hiểm cao / Cố ý che giấu)"
-        for i in range(1, len(results)):
-            results[i].risk_level = f"C'_{i + 1}: LOW SUSPICION (ROUTINE FILE)"
-            results[i].name = f"C'_{i + 1} (Ít khả nghi / Dữ liệu thông thường)"
+        for idx, res in enumerate(results):
+            cid = idx + 1
+            avg_kw, avg_conceal = res.average_features[0], res.average_features[1]
+            if res.artifact_count == 0:
+                res.risk_level = f"C'_{cid}: EMPTY CLUSTER (NO ARTIFACTS)"
+                res.name = f"C'_{cid} (Cụm rỗng)"
+            elif avg_conceal > 0:
+                res.risk_level = f"C'_{cid}: HIGH SUSPICION (DELIBERATE CONCEALMENT / EXTENSION TAMPERING)"
+                res.name = f"C'_{cid} (Nguy hiểm cao / Dấu vết cố ý che giấu hoặc đổi đuôi file)"
+            elif avg_kw > 0 and idx == 0:
+                res.risk_level = f"C'_{cid}: HIGH SUSPICION (CONFIDENTIAL CONTENT / HIGH KEYWORD DENSITY)"
+                res.name = f"C'_{cid} (Khả nghi cao / Tập trung tài liệu mật)"
+            else:
+                res.risk_level = f"C'_{cid}: LOW SUSPICION (ROUTINE FILE)"
+                res.name = f"C'_{cid} (Ít khả nghi / Dữ liệu thông thường)"
 
     return results
