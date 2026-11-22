@@ -297,14 +297,21 @@ def decrypt_clusters(
             if res.artifact_count == 0:
                 res.risk_level = f"C'_{cid}: EMPTY CLUSTER (NO ARTIFACTS)"
                 res.name = f"C'_{cid} (Cụm rỗng)"
-            elif avg_conceal > 0:
-                res.risk_level = f"C'_{cid}: HIGH SUSPICION (DELIBERATE CONCEALMENT / EXTENSION TAMPERING)"
-                res.name = f"C'_{cid} (Nguy hiểm cao / Dấu vết cố ý che giấu hoặc đổi đuôi file)"
-            elif avg_kw > 0 and idx == 0:
-                res.risk_level = f"C'_{cid}: HIGH SUSPICION (CONFIDENTIAL CONTENT / HIGH KEYWORD DENSITY)"
-                res.name = f"C'_{cid} (Khả nghi cao / Tập trung tài liệu mật)"
+            elif idx == 0:
+                # Top-ranked cluster: Highest risk and primary focus for selective release
+                if avg_conceal > 0:
+                    res.risk_level = f"C'_{cid}: HIGH SUSPICION (PRIMARY TARGET / SUSPECTED CONCEALMENT)"
+                    res.name = f"C'_{cid} (Nguy cơ cao nhất / Nghi vấn cố ý che giấu hoặc đổi đuôi)"
+                else:
+                    res.risk_level = f"C'_{cid}: HIGH SUSPICION (PRIMARY TARGET / CONFIDENTIAL CONTENT)"
+                    res.name = f"C'_{cid} (Khả nghi cao nhất / Tập trung tài liệu mật)"
             else:
-                res.risk_level = f"C'_{cid}: LOW SUSPICION (ROUTINE FILE)"
-                res.name = f"C'_{cid} (Ít khả nghi / Dữ liệu thông thường)"
+                # Secondary clusters: Lower priority / anomaly
+                if avg_conceal > 0 or avg_kw > 0:
+                    res.risk_level = f"C'_{cid}: MODERATE SUSPICION (SECONDARY CANDIDATES / LOWER ANOMALY)"
+                    res.name = f"C'_{cid} (Khả nghi thứ cấp / Mức độ bất thường thấp hơn)"
+                else:
+                    res.risk_level = f"C'_{cid}: LOW SUSPICION (ROUTINE FILE)"
+                    res.name = f"C'_{cid} (Ít khả nghi / Dữ liệu thông thường)"
 
     return results
